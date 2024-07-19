@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hunting and Fishing Guide Finder</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #welcome {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            background-image: url('https://i.imgur.com/ZN6JUwB.jpeg');
+            background-size: cover;
+            background-position: center;
+        }
+        .container {
+            text-align: center;
+        }
+        h1 {
+            color: #f0f0f0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        button {
+            background-color: #FFD700;
+            border: none;
+            color: #333;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #FFC700;
+        }
+        #map {
+            height: 100%;
+            width: 75%;
+            display: none;
+            float: left;
+        }
+        #guide-list {
+            height: 100%;
+            width: 25%;
+            display: none;
+            float: right;
+            overflow-y: auto;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .guide-item {
+            margin-bottom: 10px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .guide-item:hover {
+            background-color: #f0f0f0;
+        }
+        #activity-choice {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        #activity-buttons {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="welcome">
+        <div class="container">
+            <h1>Planning an adventure? Let's get started!</h1>
+            <button id="toMapButton">TO THE MAP</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+    <div id="guide-list"></div>
+    <div id="activity-choice">
+        <div id="activity-buttons">
+            <button id="hunting-button">Hunting</button>
+            <button id="fishing-button">Fishing</button>
+        </div>
+    </div>
+
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoiYm9tdWxsMjEiLCJhIjoiY2x5cDlpMnJ1MHJjYTJqcHY0MG9qM3JhdiJ9.U4e0MR2gVTrSUmfpWBCFpg';
+
+        // Sample guide data for Arizona with contact information
+        const arizonaGuides = {
+            hunting: [
+                { name: "Desert Hunter", lat: 33.4484, lng: -112.0740, email: "desert.hunter@email.com", phone: "(480) 555-1234" },
+                { name: "Mountain Expert", lat: 35.1983, lng: -111.6513, email: "mountain.expert@email.com", phone: "(928) 555-5678" },
+                { name: "Canyon Guide", lat: 36.0544, lng: -112.1401, email: "canyon.guide@email.com", phone: "(928) 555-9012" },
+                { name: "Wild West Hunts", lat: 32.2226, lng: -110.9747, email: "wildwest.hunts@email.com", phone: "(520) 555-3456" },
+                { name: "Sonoran Tracker", lat: 32.1558, lng: -112.2314, email: "sonoran.tracker@email.com", phone: "(520) 555-7890" },
+                { name: "Rim Country Outfitters", lat: 34.2542, lng: -111.3111, email: "rimcountry.outfitters@email.com", phone: "(928) 555-2345" },
+                { name: "Copper State Hunting", lat: 33.4152, lng: -111.8315, email: "copperstate.hunting@email.com", phone: "(480) 555-6789" },
+                { name: "Saguaro Stalkers", lat: 32.3199, lng: -111.1660, email: "saguaro.stalkers@email.com", phone: "(520) 555-0123" },
+                { name: "High Desert Hunters", lat: 34.5400, lng: -112.4685, email: "highdesert.hunters@email.com", phone: "(928) 555-4567" },
+                { name: "Arizona Game Getters", lat: 33.9519, lng: -112.7598, email: "azgame.getters@email.com", phone: "(623) 555-8901" }
+            ],
+            fishing: [
+                { name: "Lake Powell Anglers", lat: 36.9356, lng: -111.4858, email: "lakepowell.anglers@email.com", phone: "(928) 555-2345" },
+                { name: "Roosevelt Lake Guides", lat: 33.6698, lng: -111.1473, email: "roosevelt.guides@email.com", phone: "(480) 555-6789" },
+                { name: "Colorado River Fishing", lat: 34.8492, lng: -114.5759, email: "coloradoriver.fishing@email.com", phone: "(928) 555-0123" },
+                { name: "Apache Lake Adventures", lat: 33.5841, lng: -111.2680, email: "apachelake.adventures@email.com", phone: "(480) 555-4567" },
+                { name: "Salt River Fly Fishing", lat: 33.5198, lng: -111.9390, email: "saltriver.flyfishing@email.com", phone: "(480) 555-8901" },
+                { name: "Canyon Lake Charters", lat: 33.5403, lng: -111.4292, email: "canyonlake.charters@email.com", phone: "(480) 555-2345" },
+                { name: "Verde River Trout", lat: 34.5478, lng: -111.8543, email: "verderiver.trout@email.com", phone: "(928) 555-6789" },
+                { name: "Saguaro Lake Bass Pros", lat: 33.5650, lng: -111.5373, email: "saguarolake.basspros@email.com", phone: "(480) 555-0123" },
+                { name: "Bartlett Lake Fishing", lat: 33.8372, lng: -111.6298, email: "bartlettlake.fishing@email.com", phone: "(480) 555-4567" },
+                { name: "Havasu Fishing Experts", lat: 34.4839, lng: -114.3224, email: "havasu.fishingexperts@email.com", phone: "(928) 555-8901" }
+            ]
+        };
+
+        var map;
+        var hoveredStateId = null;
+        var guideMarkers = [];
+
+        document.getElementById('toMapButton').addEventListener('click', function() {
+            document.getElementById('welcome').style.display = 'none';
+            document.getElementById('map').style.display = 'block';
+            document.getElementById('guide-list').style.display = 'block';
+            initMap();
+        });
+
+        function initMap() {
+            map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/light-v10',
+                center: [-96, 37.8],
+                zoom: 3
+            });
+
+            map.on('load', function () {
+                map.addSource('states', {
+                    'type': 'vector',
+                    'url': 'mapbox://mapbox.us_census_states_2015'
+                });
+
+                map.addLayer({
+                    'id': 'state-borders',
+                    'type': 'line',
+                    'source': 'states',
+                    'source-layer': 'states',
+                    'layout': {},
+                    'paint': {
+                        'line-color': '#000',
+                        'line-width': 2
+                    }
+                });
+
+                map.addLayer({
+                    'id': 'state-fills',
+                    'type': 'fill',
+                    'source': 'states',
+                    'source-layer': 'states',
+                    'layout': {},
+                    'paint': {
+                        'fill-color': 'transparent',
+                        'fill-opacity': 0.5
+                    }
+                });
+
+                map.on('mouseenter', 'state-fills', function () {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+
+                map.on('mouseleave', 'state-fills', function () {
+                    map.getCanvas().style.cursor = '';
+                });
+
+                map.on('mousemove', 'state-fills', function(e) {
+                    if (e.features.length > 0) {
+                        if (hoveredStateId) {
+                            map.setFeatureState(
+                                { source: 'states', sourceLayer: 'states', id: hoveredStateId },
+                                { hover: false }
+                            );
+                        }
+                        hoveredStateId = e.features[0].id;
+                        map.setFeatureState(
+                            { source: 'states', sourceLayer: 'states', id: hoveredStateId },
+                            { hover: true }
+                        );
+                    }
+                });
+
+                map.on('mouseleave', 'state-fills', function() {
+                    if (hoveredStateId) {
+                        map.setFeatureState(
+                            { source: 'states', sourceLayer: 'states', id: hoveredStateId },
+                            { hover: false }
+                        );
+                    }
+                    hoveredStateId = null;
+                });
+
+                map.on('click', 'state-fills', function(e) {
+                    if (e.features.length > 0) {
+                        var properties = e.features[0].properties;
+                        var stateName = properties.STATE_NAME || 'Unknown';
+                        var stateId = properties.STATE_ID || 'Unknown';
+
+                        if (stateName.toLowerCase() === 'arizona' || stateId === '04') {
+                            map.flyTo({
+                                center: e.lngLat,
+                                zoom: 6
+                            });
+                            setTimeout(function() {
+                                document.getElementById('activity-choice').style.display = 'flex';
+                            }, 1000);
+                        } else {
+                            alert('Guide data is only available for Arizona in this demo. You clicked on: ' + stateName);
+                        }
+                    } else {
+                        console.log("No features found at this point");
+                    }
+                });
+
+                map.setPaintProperty('state-fills', 'fill-color', [
+                    'case',
+                    ['boolean', ['feature-state', 'hover'], false],
+                    'yellow',
+                    'transparent'
+                ]);
+            });
+        }
+
+        function showGuides(activity) {
+            document.getElementById('activity-choice').style.display = 'none';
+            clearGuideMarkers();
+            document.getElementById('guide-list').innerHTML = '';
+
+            arizonaGuides[activity].forEach((guide, index) => {
+                var marker = new mapboxgl.Marker()
+                    .setLngLat([guide.lng, guide.lat])
+                    .addTo(map);
+                
+                guideMarkers.push(marker);
+
+                var popup = new mapboxgl.Popup({ offset: 25 })
+                    .setHTML(`<strong>${guide.name}</strong><br>Email: ${guide.email}<br>Phone: ${guide.phone}`);
+                
+                marker.setPopup(popup);
+
+                var listItem = document.createElement('div');
+                listItem.className = 'guide-item';
+                listItem.innerHTML = `<strong>${guide.name}</strong><br>Email: ${guide.email}<br>Phone: ${guide.phone}`;
+                listItem.addEventListener('mouseover', () => {
+                    marker.getElement().style.filter = 'hue-rotate(120deg)';
+                });
+                listItem.addEventListener('mouseout', () => {
+                    marker.getElement().style.filter = '';
+                });
+                document.getElementById('guide-list').appendChild(listItem);
+            });
+        }
+
+        function clearGuideMarkers() {
+            guideMarkers.forEach(marker => marker.remove());
+            guideMarkers = [];
+        }
+
+        document.getElementById('hunting-button').addEventListener('click', () => showGuides('hunting'));
+        document.getElementById('fishing-button').addEventListener('click', () => showGuides('fishing'));
+    </script>
+</body>
+</html>
