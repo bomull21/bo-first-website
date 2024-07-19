@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hunting and Fishing Guide Finder</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #welcome {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            background-image: url('https://i.imgur.com/ZN6JUwB.jpeg');
+            background-size: cover;
+            background-position: center;
+        }
+        .container {
+            text-align: center;
+        }
+        h1 {
+            color: #f0f0f0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        button {
+            background-color: #FFD700;
+            border: none;
+            color: #333;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #FFC700;
+        }
+        #map {
+            height: 100%;
+            width: 75%;
+            display: none;
+            float: left;
+        }
+        #guide-list {
+            height: 100%;
+            width: 25%;
+            display: none;
+            float: right;
+            overflow-y: auto;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .guide-item {
+            margin-bottom: 10px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .guide-item:hover {
+            background-color: #f0f0f0;
+        }
+        #activity-choice {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        #activity-buttons {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        #auth-buttons {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="auth-buttons">
+        <button id="login-button">Login</button>
+        <button id="signup-button">Sign Up</button>
+        <button id="logout-button" style="display: none;">Logout</button>
+    </div>
+
+    <div id="welcome">
+        <div class="container">
+            <h1>Planning an adventure? Let's get started!</h1>
+            <button id="toMapButton">TO THE MAP</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+    <div id="guide-list"></div>
+    <div id="activity-choice">
+        <div id="activity-buttons">
+            <button id="hunting-button">Hunting</button>
+            <button id="fishing-button">Fishing</button>
+        </div>
+    </div>
+
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoiYm9tdWxsMjEiLCJhIjoiY2x5cDlpMnJ1MHJjYTJqcHY0MG9qM3JhdiJ9.U4e0MR2gVTrSUmfpWBCFpg';
+
+        var map;
+        var hoveredStateId = null;
+        var guideMarkers = [];
+
+        document.getElementById('toMapButton').addEventListener('click', function() {
+            document.getElementById('welcome').style.display = 'none';
+            document.getElementById('map').style.display = 'block';
+            document.getElementById('guide-list').style.display = 'block';
+            initMap();
+        });
+
+        document.getElementById('login-button').addEventListener('click', () => {
+            window.location.href = '/login.html';
+        });
+
+        document.getElementById('signup-button').addEventListener('click', () => {
+            window.location.href = '/signup.html';
+        });
+
+        document.getElementById('logout-button').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userType');
+            updateAuthButtons();
+        });
+
+        function updateAuthButtons() {
+            const token = localStorage.getItem('token');
+            if (token) {
+                document.getElementById('login-button').style.display = 'none';
+                document.getElementById('signup-button').style.display = 'none';
+                document.getElementById('logout-button').style.display = 'inline-block';
+            } else {
+                document.getElementById('login-button').style.display = 'inline-block';
+                document.getElementById('signup-button').style.display = 'inline-block';
+                document.getElementById('logout-button').style.display = 'none';
+            }
+        }
+
+        function initMap() {
+            map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/light-v10',
+                center: [-96, 37.8],
+                zoom: 3
+            });
+
+            map.on('load', function () {
+                // ... (rest of the map initialization code)
+            });
+        }
+
+        function showGuides(activity) {
+            document.getElementById('activity-choice').style.display = 'none';
+            clearGuideMarkers();
+            loadProfiles(activity);
+        }
+
+        function clearGuideMarkers() {
+            guideMarkers.forEach(marker => marker.remove());
+            guideMarkers = [];
+        }
+
+        async function loadProfiles(activity) {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await axios.get(`/api/profiles?activity=${activity}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const profiles = response.data;
+                const guideList = document.getElementById('guide-list');
+                guideList.innerHTML = '';
+
+                profiles.forEach(profile => {
+                    const marker = new mapboxgl.Marker()
+                        .setLngLat([profile.lng, profile.lat])
+                        .addTo(map);
+                    
+                    guideMarkers.push(marker);
+
+                    const popup = new mapboxgl.Popup({ offset: 25 })
+                        .setHTML(`<strong>${profile.user.username}</strong><br>Email: ${profile.email}<br>Phone: ${profile.phone}`);
+                    
+                    marker.setPopup(popup);
+
+                    const listItem = document.createElement('div');
+                    listItem.className = 'guide-item';
+                    listItem.innerHTML = `
+                        <strong>${profile.user.username}</strong><br>
+                        Location: ${profile.city}, ${profile.state}<br>
+                        Email: ${profile.email}<br>
+                        Phone: ${profile.phone}<br>
+                        ${profile.description}<br>
+                        Activities: ${profile.activitiesOffered.join(', ')}
+                    `;
+                    listItem.addEventListener('mouseover', () => {
+                        marker.getElement().style.filter = 'hue-rotate(120deg)';
+                    });
+                    listItem.addEventListener('mouseout', () => {
+                        marker.getElement().style.filter = '';
+                    });
+                    guideList.appendChild(listItem);
+                });
+            } catch (error) {
+                console.error('Error loading profiles:', error);
+                if (error.response && error.response.status === 401) {
+                    alert('Please log in to view guide profiles.');
+                    window.location.href = '/login.html';
+                }
+            }
+        }
+
+        document.getElementById('hunting-button').addEventListener('click', () => showGuides('hunting'));
+        document.getElementById('fishing-button').addEventListener('click', () => showGuides('fishing'));
+
+        updateAuthButtons();
+    </script>
+</body>
+</html>
